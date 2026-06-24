@@ -1,0 +1,307 @@
+/* VARIABLES NÓRDICAS */
+:root {
+    --soft-blue: #9ECAD6;
+    --muted-indigo: #748DAE;
+    --blush-pink: #F5CBCB;
+    --light-rose: #FFEAEA;
+    --bg-primary: #fafafa;
+    --text-main: #2D3436;
+    --text-muted: #636E72;
+    --card-bg: #fffdfd;
+    --border-color: #EEEEEE;
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Fondo de la App */
+.stApp {
+    background-color: var(--bg-primary);
+}
+
+/* HERO SECTION */
+.hero {
+    padding: 1rem 0;
+    margin-bottom: 1rem;
+}
+
+.bold-title {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--text-main);
+    letter-spacing: -1.5px;
+    margin-bottom: 0;
+}
+
+.tagline {
+    font-size: 2rem;
+    color: var(--muted-indigo);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+/* CARDS DE MÉTRICAS - Estilo Nórdico Reforzado */
+.card {
+    background: var(--card-bg);
+    padding: 1.5rem;
+    border-radius: 12px; /* Bordes redondeados solicitados */
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-soft); /* Sombra suave */
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+/* .card:hover {
+    transform: translateY(-2px);
+} */
+
+.card-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 800;
+    margin-bottom: 0.8rem;
+}
+
+.stat-value {
+    font-size: 2.2rem; /* Tamaño mayor para importancia */
+    font-weight: 800; /* Negrita resaltada */
+    color: var(--muted-indigo);
+    line-height: 1;
+}
+
+/* Contenedor principal de la card de texto */
+.text-card {
+    background: var(--card-bg);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-soft);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+/* Contenedor y estilo de la imagen para que quede perfecta */
+.card-image-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.card-image-container img {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.dashboard-card {
+    background: var(--card-bg);
+    padding: 2rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-soft, 0 4px 6px -1px rgba(0,0,0,0.05));
+    text-align: left;
+    /* Hacemos que cada card ocupe espacio equitativo si están en un contenedor flex */
+    flex: 1; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Título: Mayúsculas y color --muted-indigo */
+.text-card-title {
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    color: var(--muted-indigo); /* Tu color solicitado */
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    margin-top: 0px;
+}
+
+/* Párrafo: Color normal/atenuado */
+.text-card-body {
+    font-size: 1rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 0px;
+}
+
+/* Ajuste para el contenedor de la lista */
+.text-card ul {
+    margin-top: 0.5rem;
+    margin-bottom: 0px;
+    padding-left: 1.5rem; /* Forzar el espaciado hacia la derecha para las viñetas */
+    list-style-type: disc; /* Asegura la forma clásica de la viñeta */
+}
+
+/* Ajuste para cada elemento de la lista (opcional, para mejorar legibilidad) */
+.text-card li {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 0.5rem; /* Espacio sutil entre viñetas */
+}
+
+/* Evitar que el último elemento de la lista tenga margen inferior extra */
+.text-card li:last-child {
+    margin-bottom: 0px;
+}
+
+/* FIGURAS / GRÁFICOS */
+/* Forzamos el borde redondeado y sombra en los contenedores de pyplot */
+/* Asegura que el contenedor del gráfico no fuerce tamaños extraños */
+.stPyplot {
+    width: 100% ;
+    max-width: 100% ;
+    margin: 10px 0;
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border: 1px solid #EEEEEE;
+    
+}
+/* Ajuste para que las columnas de Streamlit no corten la sombra */
+[data-testid="column"] {
+    padding: 10px ;
+}
+
+[data-testid="stMarkdownContainer"] {
+    font-size: 16px;
+}
+
+
+.stTabs [data-testid="stLabel"] {
+    font-size: 20px;
+    font-family: 'Arial', sans-serif;
+    background-color: transparent;
+}
+
+
+/* TABS (ELIMINAR ROJO) */
+/* Contenedor general de pestañas */
+.stTabs [data-baseweb="tab-list"] {
+    display: flex;
+    width: 100%;
+    gap: 0;
+}
+
+/* Pestaña individual */
+.stTabs [data-baseweb="tab"] {
+    font-weight: 800;
+    flex: 1 1 0;
+    min-height: 60px;
+    background-color: transparent;
+    border: none;
+    color: var(--soft-blue);
+    padding: 1rem 0.5rem;
+    line-height: 1.1;
+    text-align: center;
+}
+
+/* Pestaña seleccionada (Sobrescribe el rojo de Streamlit) */
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    font-weight: 800;
+    border-bottom: 3px solid var(--muted-indigo);
+    color: var(--muted-indigo);
+    
+
+}
+
+/* Oculta la línea roja móvil debajo de las tabs */
+.stTabs [data-baseweb="tab-highlight"],
+.stTabs [data-baseweb="tab-highlight"]::before,
+.stTabs [data-baseweb="tab-highlight"]::after {
+    display: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 0rem;
+    max-width: 95%;
+}
+
+/*Estilos para tablas*/
+
+.dashboardTable {
+    border-collapse: collapse;
+    margin: 5px 0;
+    font-size: 0.9em;
+    font-family: sans-serif;    
+    width:100%
+}
+.dashboardTable thead tr {
+    background-color: #f4f4f9;
+    color: var(--muted-indigo);
+    text-align: left;
+}
+.dashboardTable th,
+.dashboardTable td {
+    /* padding: 5px 5px; */
+    border:none;
+}
+
+.dashboardTable tbody tr {
+    border-bottom: 1px solid #ecedff;
+    background-color:white;
+}
+
+.dashboardTable tbody tr:nth-of-type(even) {
+    background-color: #f3f3f3;
+}
+
+div[class*='st-key-chart']
+{
+    overflow:hidden;
+    border-radius: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+div[class*='st-key-table']{    
+    border-radius: 10px;
+    background-color: var(--card-bg);
+    padding: 1% 10px 10px 10px;    
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilos para st.sidebar.multiselect */
+[data-testid="stSidebar"] [data-baseweb="select"] {
+    color: var(--soft-blue) !important;
+}
+
+[data-testid="stSidebar"] [data-baseweb="select"] button,
+[data-testid="stSidebar"] [data-baseweb="select"] div[role="button"] {
+    color: var(--soft-blue) !important;
+}
+
+[data-testid="stSidebar"] [data-baseweb="select"] [aria-selected="true"],
+[data-testid="stSidebar"] [data-baseweb="select"] [data-baseweb="tag"] {
+    border-color: var(--soft-blue) !important;
+    background-color: rgba(158, 202, 214, 0.18) !important;
+    color: var(--soft-blue) !important;
+}
+
+[data-testid="stSidebar"] [data-baseweb="select"]:focus-within {
+    border-color: var(--soft-blue) !important;
+    box-shadow: 0 0 0 1px rgba(158, 202, 214, 0.35) !important;
+}
+
+
+
+.st-c2 {
+    background-color: var(--soft-blue) !important;
+}
+.st-emotion-cache-1cl4umz{
+        background-color: var(--soft-blue) !important;
+        color: var(--muted-indigo) !important;
+        border: 1px solid var(--soft-blue) !important;
+}
+/* (scrollbar-color:transparent transparent) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--muted-indigo) !important;
+    }
+} */
