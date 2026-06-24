@@ -7,6 +7,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import geopandas as gpd
 import base64
+import gdown
+import os
 
 
 # 1. CONFIGURACIÓN E INTERFAZ
@@ -26,16 +28,20 @@ def get_image_base64(image_path):
 img_fase1_base64 = get_image_base64("fase_1.png")
 img_fase2_base64 = get_image_base64("fase_2.png")
 
-# Reemplaza con el ID real de tu archivo de Google Drive
-FILE_ID = "AN_ID_LARGO_Y_COMPLEJO"
-URL = f"https://docs.google.com/uc?export=download&id={FILE_ID}"
 
-
-@st.cache_data  # Es muy importante usar caché para un archivo de 183 MB
+@st.cache_data
 def load_data():
-    return pd.read_csv(URL)
+    FILE_ID = "1cmydGhpnf__atXbNfv0G-7OY0HOurVPB"
+    output_path = "ntrarogyaseva_final.csv"
 
+    # Si el archivo no existe localmente, gdown lo descarga saltándose el aviso de virus
+    if not os.path.exists(output_path):
+        url = f"https://drive.google.com/uc?id={FILE_ID}"
+        gdown.download(url, output_path, quiet=False)
 
+    df = pd.read_csv(output_path)
+    df.columns = df.columns.str.strip()
+    return df
 df = load_data()
 geo_ap = gpd.read_file('AndhraPradesh_Districts.geojson')
 gep_tg = gpd.read_file('telangana.geojson')
@@ -103,30 +109,30 @@ cirugias_a_graficar = [
 ]
 
 # Forzar limpieza en la columna de control
-df['Momento_Autorizacion'] = df['Momento_Autorizacion'].astype(str).str.strip()
+# df['Momento_Autorizacion'] = df['Momento_Autorizacion'].astype(str).str.strip()
 
-# Extracción de tarifas teóricas sobre el flujo estándar
-df_quantiles = df[df['SURGERY'].isin(cirugias_a_graficar)].groupby(['SURGERY', 'Momento_Autorizacion'], observed=False)['DOLARES_CLAIM'].median().reset_index()
-df_tarifas_teoricas = df_quantiles[df_quantiles['Momento_Autorizacion'] == 'Autorización Previa (Flujo Estándar)'].copy()
+# # Extracción de tarifas teóricas sobre el flujo estándar
+# df_quantiles = df[df['SURGERY'].isin(cirugias_a_graficar)].groupby(['SURGERY', 'Momento_Autorizacion'], observed=False)['DOLARES_CLAIM'].median().reset_index()
+# df_tarifas_teoricas = df_quantiles[df_quantiles['Momento_Autorizacion'] == 'Autorización Previa (Flujo Estándar)'].copy()
 
-if df_tarifas_teoricas.empty:
-    df_tarifas_teoricas = df_quantiles[df_quantiles['Momento_Autorizacion'].str.contains('Previa', na=False)].copy()
+# if df_tarifas_teoricas.empty:
+#     df_tarifas_teoricas = df_quantiles[df_quantiles['Momento_Autorizacion'].str.contains('Previa', na=False)].copy()
 
-df_tarifas_teoricas.columns = ['SURGERY', 'Momento_Autorizacion', 'tarifa_base_teorica']
-df_tarifas_teoricas['tarifa_nabh_teorica'] = df_tarifas_teoricas['tarifa_base_teorica'] * 1.02
+# df_tarifas_teoricas.columns = ['SURGERY', 'Momento_Autorizacion', 'tarifa_base_teorica']
+# df_tarifas_teoricas['tarifa_nabh_teorica'] = df_tarifas_teoricas['tarifa_base_teorica'] * 1.02
 
-map_base = dict(zip(df_tarifas_teoricas['SURGERY'], df_tarifas_teoricas['tarifa_base_teorica']))
-map_nabh = dict(zip(df_tarifas_teoricas['SURGERY'], df_tarifas_teoricas['tarifa_nabh_teorica']))
+# map_base = dict(zip(df_tarifas_teoricas['SURGERY'], df_tarifas_teoricas['tarifa_base_teorica']))
+# map_nabh = dict(zip(df_tarifas_teoricas['SURGERY'], df_tarifas_teoricas['tarifa_nabh_teorica']))
 
-df['tarifa_base'] = df['SURGERY'].map(map_base)
-df['tarifa_nabh'] = df['SURGERY'].map(map_nabh)
-df['ratio_cobro'] = df['DOLARES_CLAIM'] / df['tarifa_base']
+# df['tarifa_base'] = df['SURGERY'].map(map_base)
+# df['tarifa_nabh'] = df['SURGERY'].map(map_nabh)
+# df['ratio_cobro'] = df['DOLARES_CLAIM'] / df['tarifa_base']
 
-# Algoritmo de clasificación de Hospitales NABH Estimado
-hospital_scoring = df.groupby('HOSP_NAME')['ratio_cobro'].quantile(0.75).reset_index()
-hospital_scoring['TIENE_NABH'] = (hospital_scoring['ratio_cobro'] > 1.01).astype(int)
-mapeo_nabh_distrito = dict(zip(hospital_scoring['HOSP_NAME'], hospital_scoring['TIENE_NABH']))
-df['TIENE_NABH'] = df['HOSP_NAME'].map(mapeo_nabh_distrito)
+# # Algoritmo de clasificación de Hospitales NABH Estimado
+# hospital_scoring = df.groupby('HOSP_NAME')['ratio_cobro'].quantile(0.75).reset_index()
+# hospital_scoring['TIENE_NABH'] = (hospital_scoring['ratio_cobro'] > 1.01).astype(int)
+# mapeo_nabh_distrito = dict(zip(hospital_scoring['HOSP_NAME'], hospital_scoring['TIENE_NABH']))
+# df['TIENE_NABH'] = df['HOSP_NAME'].map(mapeo_nabh_distrito)
 
 # Limpieza institucional de nombres de hospitales
 hospital_names_clean = {
