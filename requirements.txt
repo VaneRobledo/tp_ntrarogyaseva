@@ -3,5 +3,4 @@ pandas
 numpy
 plotly
 geopandas
-base64
 gdown
