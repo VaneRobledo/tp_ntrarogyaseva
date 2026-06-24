@@ -7,3 +7,4 @@ gdown
 joblib
 lightgbm
 imblearn
+scikit-learn
