@@ -39,7 +39,7 @@ def load_data():
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         gdown.download(url, output_path, quiet=False)
 
-    df = pd.read_csv(output_path)
+    df = pd.read_csv(output_path,low_memory=False)
     df.columns = df.columns.str.strip()
     return df
 df = load_data()
@@ -52,7 +52,7 @@ st.markdown(
 """
 <header class="hero">
     <h1 class="bold-title">Programa NTR Vaidya Seva</h1>
-    <p class="tagline">Análisis de Gestión Financiera</p>
+    <p class="tagline">Diagnóstico, eficiencia y gestión predictiva de riesgos</p>
 </header>
 """,
 unsafe_allow_html=True,
