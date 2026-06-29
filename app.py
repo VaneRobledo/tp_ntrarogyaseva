@@ -9,7 +9,8 @@ import geopandas as gpd
 import base64
 import gdown
 import os
-
+import lightgbm as lgb
+from sklearn.metrics import roc_curve, auc
 
 # 1. CONFIGURACIÓN E INTERFAZ
 st.set_page_config(page_title="Análisis Programa NTR Vaidya Seva", layout="centered")
@@ -31,8 +32,8 @@ img_fase2_base64 = get_image_base64("fase_2.png")
 
 @st.cache_data
 def load_data():
-    FILE_ID = "1cmydGhpnf__atXbNfv0G-7OY0HOurVPB"
-    output_path = "ntrarogyaseva_final.csv"
+    FILE_ID = "14NgsanKDwkMJ85v3AZxOKlkOsYmMkP52"
+    output_path = "ntrarogyaseva_limpio.csv"
 
     # Si el archivo no existe localmente, gdown lo descarga saltándose el aviso de virus
     if not os.path.exists(output_path):
@@ -108,6 +109,53 @@ cirugias_a_graficar = [
     'Sustitución de válvula mitral con prótesis'
 ]
 
+import streamlit as st
+import pandas as pd
+
+def generarTabla(filtered_df, include_index=False):
+    columns = list(filtered_df.columns)
+    if include_index:
+        columns.insert(0, 'Índice')
+        
+    # Corrección: Se cierra con </tr> al final del header
+    header = '</th><th>'.join(columns)
+    header = f'<thead><tr><th>{header}</th></tr></thead>'
+    
+    items = ''
+    for index, row in filtered_df.iterrows():        
+        row_data = row.tolist()
+        if include_index:
+            row_data.insert(0, index)
+            
+        cells = []
+        for x in row_data:
+            # 1. Si es un string que termina en %, lo alineamos a la derecha
+            if isinstance(x, str) and x.endswith('%'):
+                cells.append(f'<td style="text-align:center">{x}</td>')
+            # 2. Si ya es un string común
+            elif isinstance(x, str):
+                cells.append(f'<td>{x}</td>')
+            # 3. Si es un número (int o float)
+            elif isinstance(x, (int, float)):
+                # Si es un número menor o igual a 1, probablemente sea un porcentaje flotante (ej: 0.101)
+                # Modificá esta lógica si manejás otros números decimales pequeños que no sean porcentajes
+                if 0 <= x <= 1 and any(col in filtered_df.columns for col in ['Cuantil', 'Esperado', 'Real']):
+                    cells.append(f'<td style="text-align:center">{x * 100:.1f}%</td>')
+                else:
+                    cells.append(f'<td style="text-align:center">{x:,.1f}</td>')
+            # 4. Cualquier otro tipo de dato
+            else:
+                cells.append(f'<td>{x}</td>')
+        
+        item = ''.join(cells)
+        # Corrección: Se cierra con </tr> al final de la fila
+        item = f'<tr>{item}</tr>'
+        items += item
+        
+    table = f'<table class="dashboardTable">{header}<tbody>{items}</tbody></table>'
+    st.write(table, unsafe_allow_html=True)
+
+
 # Forzar limpieza en la columna de control
 # df['Momento_Autorizacion'] = df['Momento_Autorizacion'].astype(str).str.strip()
 
@@ -154,7 +202,7 @@ df['HOSP_NAME'] = df['HOSP_NAME'].replace(hospital_names_clean)
 cols = st.columns(4)
 registros = len(df)
 cardiaco = (df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']['DOLARES_CLAIM'].sum()/df['DOLARES_CLAIM'].sum()*100).round(2)
-telangana = (df[(df['HOSP_STATE']=='Telangana')&(df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica')]['DOLARES_CLAIM'].sum()/df[df['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()*100).round(1)
+telangana = (df[(df['HOSP_STATE']=='Telangana')&(df['SURGERY'].isin(cirugias_a_graficar))]['DOLARES_CLAIM'].sum()/df[df['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()*100).round(1)
 limite = (df[(df['dias_liquidacion']>90)&(df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica')]['ID'].count()/df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']['ID'].count()*100).round(0)
 
 metrics = [
@@ -611,8 +659,9 @@ with tab_telangana:
 
         surgeries_to_filter = ['Angioplastia coronaria con stent', 'Cirugía de bypass coronario', 'Angioplastia con stent adicional', 'Sustitución de válvula mitral con prótesis', 'Bypass coronario con balón de contrapulsación (BCIAO)']
         df_cardio_selected_surgeries = df[df['SURGERY'].isin(surgeries_to_filter)].copy()
+        df_cardio = df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']
 
-        df_temp = df_cardio_selected_surgeries.copy()
+        df_temp = df_cardio.copy()
         df_temp['DISTRICT_NAME_CLEANED'] = df_temp['DISTRICT_NAME'].replace(unified_district_mapping)
         df_temp['HOSP_DISTRICT_CLEANED'] = df_temp['HOSP_DISTRICT'].replace(unified_district_mapping)
 
@@ -661,7 +710,7 @@ with tab_telangana:
             template=TEMPLATE_CORPORATIVO,
             title="<b>Matriz de Flujo de Pacientes por Distrito</b>",
             legend_title="", 
-            height=400,
+            height=600,
             margin=dict(t=60, l=40, r=40, b=40),
             legend=dict(
                 orientation="h",
@@ -707,7 +756,7 @@ with tab_telangana:
             hover_name='District',
             hover_data={'Porcentaje': ':.0f%'}, # Format percentage for hover
             color_continuous_scale="Blues",
-            zoom=5,
+            zoom=5.5,
             center={"lat": 16, "lon": 79.5},
             labels={'Porcentaje': 'Retención (%)'},
             opacity=0.7,
@@ -715,8 +764,8 @@ with tab_telangana:
         fig_mapa.update_traces(hovertemplate="<b>%{hovertext}</b><br>Porcentaje de Pacientes=%{customdata[0]:.0f}%<extra></extra>")
         fig_mapa.update_layout(
             template=TEMPLATE_CORPORATIVO,
-            height=400,
-            title="<b>Porcentaje de Retención de Pacientes por Distrito</b><br><sub>Cirugías Cardíacas Seleccionadas</sub>",
+            height=600,
+            title="<b>Porcentaje de Retención de Pacientes por Distrito</b><br><sub>Cirugías Cardíacas y Cardiotorácicas</sub>",
             font_color="lightslategray",
             font_family='Arial',
             title_font_color="dimgrey",
@@ -767,19 +816,19 @@ with tab_telangana:
 
 
     with col2: 
-
+        df_cardio = df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']
         fuga_dinero = df[df['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()
-        fuga_dinero2 = df_cardio_selected_surgeries[df_cardio_selected_surgeries['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()
+        fuga_dinero2 = df_cardio[df_cardio['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()
         porc_fuga_dinero = (fuga_dinero2 * 100) / fuga_dinero
 
-        categorias_fuga = ['Otras Especialidades<br>Exportadas', '5 Cirugías Cardíacas<br>Seleccionadas']
+        categorias_fuga = ['Otras Especialidades<br>Exportadas', 'Cirugías Cardíacas']
         porcentajes_fuga = [100 - porc_fuga_dinero, porc_fuga_dinero]
 
         fig7 = px.bar(
             y=categorias_fuga, x=porcentajes_fuga, color=categorias_fuga,
             color_discrete_map={
                 'Otras Especialidades<br>Exportadas': PALETA_MAESTRA['Neutro_Claro'],
-                '5 Cirugías Cardíacas<br>Seleccionadas': PALETA_MAESTRA['Alerta_Terracota']
+                'Cirugías Cardíacas': PALETA_MAESTRA['Alerta_Terracota']
             },
             orientation='h', labels={'x': 'Porcentaje (%)', 'y': 'Segmento Médico'}
         )
@@ -869,120 +918,158 @@ with tab_liquidacion:
                 </div>
                 """
             )
-    
+
+
     st.divider()
     """## **6. Estrategia Predictiva para la Gestión de Riesgos**"""
     col1, col2 = st.columns(2)
     with col1:
-        df_temp = df_cardio_selected_surgeries.copy()
+        df_temp = df.copy()
 
-        # Calculate the number of cases where dias_liquidacion > 180 for each surgery
+        # 1. Definimos la condición de retraso
         df_temp['long_liquidation'] = (df_temp['dias_liquidacion'] > 180).astype(int)
 
-        # Group by SURGERY and calculate the percentage
-        percentage_long_liquidation_by_surgery = df_temp.groupby('SURGERY')['long_liquidation'].mean() * 100
+        # 2. Agrupamos por SURGERY calculando las métricas correctas
+        # Para el Q90, filtramos las X dentro de la función lambda para tomar solo los > 180 días
+        df_surgery = df_temp.groupby('SURGERY').agg(
+            total_casos=('SURGERY', 'count'),
+            Percentage=('long_liquidation', lambda x: (x.sum() / len(x)) * 100),       # Clasificador (Tasa)
 
-        # Convert the series to a DataFrame for Plotly
-        plot_df_long_liquidation = percentage_long_liquidation_by_surgery.reset_index()
-        plot_df_long_liquidation.columns = ['SURGERY', 'Percentage']
+            # CORRECCIÓN: Q90 calculado SOLO sobre los casos que sufrieron retraso (>180)
+            q90_dias_liquidacion=('dias_liquidacion', lambda x: np.percentile(x[x > 180], 90) if any(x > 180) else np.nan),
 
-        # Sort for visualization
-        plot_df_long_liquidation = plot_df_long_liquidation.sort_values(by='Percentage', ascending=True)
+            CATEGORY_NAME=('CATEGORY_NAME', 'first')
+        ).reset_index()
 
-        fig_liquidation_percentage = px.bar(
-            data_frame=plot_df_long_liquidation,
-            x='Percentage',
-            y='SURGERY',
+        # 3. SELECCIÓN DE DATOS: Top 10 por volumen, ORDENADO por porcentaje
+        top_10_volumen = df_surgery.sort_values(by='total_casos', ascending=False).head(10)
+        plot_df_long_liquidation = top_10_volumen.sort_values(by='Percentage', ascending=True)
+
+        # Diccionario de traducciones para cirugías
+        surgery_translations = {
+            'herinoplasty with mesh direct inguinal hernia': 'Hernioplastia con malla para hernia inguinal directa',
+            'management of acute mi with angiogram': 'Manejo del infarto agudo de miocardio con angiografía',
+            'medical management of ischemic strokes': 'Manejo de ACV isquémicos'
+        }
+
+        # Aplicar traducciones a la columna 'SURGERY'
+        plot_df_long_liquidation['SURGERY'] = plot_df_long_liquidation['SURGERY'].replace(surgery_translations)
+
+        # --- CONSTRUCCIÓN DEL GRÁFICO EN PLOTLY ---
+        fig_liquidation_percentage = go.Figure()
+
+        # Modelo 1 (Clasificador): Barras con la proporción de retraso
+        fig_liquidation_percentage.add_trace(go.Bar(
+            y=plot_df_long_liquidation['SURGERY'],
+            x=plot_df_long_liquidation['Percentage'],
+            name='Tasa de Retraso (>180 días)',
             orientation='h',
-            color_discrete_sequence=[PALETA_MAESTRA['Secundario_Menta']],
-            labels={
-                'Percentage': 'Porcentaje de Casos (%)',
-                'SURGERY': 'Cirugía'
-            },
-            title="<b>Porcentaje de Casos con Liquidación > 180 Días por Cirugía</b><br><sub>Análisis de Demora Crítica en Cirugías Cardíacas Seleccionadas</sub>"
-        )
+            marker=dict(color=PALETA_MAESTRA['Secundario_Menta']),
+            xaxis='x1',
+            hovertemplate="<b>%{y}</b><br>Retraso: %{x:.1f}%<extra></extra>"
+        ))
 
-        fig_liquidation_percentage.update_traces(
-            texttemplate='%{x:.1f}%',
-            textposition='outside',
-            textfont=dict(color='dimgrey', size=10),
-            hovertemplate="<b>Cirugía:</b> %{y}<br><b>Porcentaje > 180 días:</b> %{x:.2f}%<extra></extra>"
-        )
+        # Modelo 2 (Regresor Q90 Corregido): Línea con el cuantil 90 de los casos condicionados al retraso
+        fig_liquidation_percentage.add_trace(go.Scatter(
+            y=plot_df_long_liquidation['SURGERY'],
+            x=plot_df_long_liquidation['q90_dias_liquidacion'],
+            name='Días de Demora Excesiva (Q90 de Casos >180d)',
+            mode='lines+markers',
+            line=dict(color=PALETA_MAESTRA['Alerta_Terracota'], width=3, dash='dash'),
+            marker=dict(size=9, symbol='diamond'),
+            xaxis='x2',
+            hovertemplate="<b>%{y}</b><br>Techo de Demora Atrasada (Q90): %{x:.0f} días<extra></extra>"
+        ))
 
+        # Configuración de los ejes independientes y solución de solapamiento
         fig_liquidation_percentage.update_layout(
+            title=dict(
+                text='<b>Análisis Dinámico por SURGERY:</b><br>Proporción de Incidencia vs. Techo de Días en Casos Atrasados (Q90)',
+                x=0.5,
+                y=0.96,
+                xanchor='center',
+                yanchor='top'
+            ),
+            margin=dict(t=120, b=100, l=150, r=50),
+            yaxis=dict(title=''),
+            xaxis=dict(
+                title='Casos que superan los 180 días (%)',
+                tickfont=dict(color=PALETA_MAESTRA['Secundario_Menta']),
+                side='bottom',
+                ticksuffix='%'
+            ),
+            xaxis2=dict(
+                title=dict(
+                    text='Días de liquidación (Solo casos > 180 días)',
+                    standoff=15
+                ),
+                tickfont=dict(color=PALETA_MAESTRA['Alerta_Terracota']),
+                overlaying='x',
+                side='top',
+                showgrid=False,
+                # Forzamos a que el eje superior empiece en 180 para que tenga sentido conceptual
+                range=[180, max(plot_df_long_liquidation['q90_dias_liquidacion'].max() * 1.05, 200)]
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
             template=TEMPLATE_CORPORATIVO,
-            xaxis=dict(ticksuffix="%"),
-            yaxis=dict(categoryorder='total ascending',title=''), # To ensure the largest bars are at the top
-            margin=dict(t=60, l=40, r=40, b=40), # Adjust margin for longer labels
-            title_x=0.1, title_y=0.95,
-            font_color="lightslategray",
-            font_family='Arial',
-            title_font=dict(size=20, weight=900),
-            title_font_color="dimgrey",
-            font=dict(size=16, weight=700),
+            width=1050,
+            height=650
         )
         st.plotly_chart(fig_liquidation_percentage, width='stretch', key='chart-liqcirugias')
 
     with col2:
-        df_cardio_selected_surgeries_long_liquidation = df_cardio_selected_surgeries[df_cardio_selected_surgeries['dias_liquidacion'] > 180]
+        df_metrics = df_temp.groupby(['HOSP_LOCATION', 'HOSP_TYPE']).agg(
+            tasa_retraso=('long_liquidation', lambda x: (x.sum() / len(x)) * 100),
+            mediana_costo=('DOLARES_PREAUTH', 'median'),
+            total_casos=('HOSP_LOCATION', 'count')
+        ).reset_index()
 
-        # Count long liquidation cases per district
-        long_liquidation_counts = df_cardio_selected_surgeries_long_liquidation['HOSP_LOCATION'].value_counts()
+        # Tu cambio a 30 casos para capturar el sector privado
+        top_30_criticos = df_metrics.sort_values(by='tasa_retraso', ascending=False).head(30)
 
-        # Count total cases per district
-        total_cases_counts = df_cardio_selected_surgeries['HOSP_LOCATION'].value_counts()
+        # --- IDENTIFICAR PUNTOS DESTACABLES ---
+        # Identificamos los índices de los 3 más caros y los 3 con más retraso
+        top_retraso = top_30_criticos.nlargest(4, 'tasa_retraso').index
+        top_costo = top_30_criticos.nlargest(4, 'mediana_costo').index
+        indices_destacados = set(top_retraso).union(set(top_costo))
 
-        # Calculate the proportion as a Series
-        proportion_long_liquidation_series = (long_liquidation_counts / total_cases_counts).fillna(0).sort_values(ascending=False)
+        # Creamos una columna limpia: solo tiene el nombre si es un punto destacado
+        top_30_criticos['etiqueta_visible'] = top_30_criticos.apply(
+            lambda row: row['HOSP_LOCATION'] if row.name in indices_destacados else '', axis=1
+        )
 
-        # Convert the Series to a DataFrame
-        proportion_long_liquidation = proportion_long_liquidation_series.reset_index()
-        proportion_long_liquidation.columns = ['HOSP_LOCATION', 'Proportion_Long_Liquidation']
-
-        # Multiply by 100 to convert to a 0-100 percentage scale
-        proportion_long_liquidation['Proportion_Long_Liquidation'] = proportion_long_liquidation['Proportion_Long_Liquidation'] * 100
-
-        # Get a mapping of HOSP_LOCATION to HOSP_DISTRICT from df_cardio_selected_surgeries
-        district_state_map = df_cardio_selected_surgeries[['HOSP_LOCATION', 'HOSP_DISTRICT']].drop_duplicates(subset=['HOSP_LOCATION'], keep='first').set_index('HOSP_LOCATION')['HOSP_DISTRICT']
-
-        # Add the HOSP_DISTRICT column to the proportion_long_liquidation DataFrame
-        proportion_long_liquidation['HOSP_DISTRICT'] = proportion_long_liquidation['HOSP_LOCATION'].map(district_state_map)
-        plot_data = proportion_long_liquidation.head(10)
-
-        fig_plotly = px.bar(
-            data_frame=plot_data,
-            x='Proportion_Long_Liquidation',
-            y='HOSP_LOCATION',
-            color='HOSP_DISTRICT',
-            orientation='h',
-            color_discrete_map=PALETA_DISTRITOS, # 'estados' is defined globally with colors for Andhra Pradesh and Telangana
+        # --- CONSTRUCCIÓN DEL GRÁFICO ---
+        fig_plotly = px.scatter(
+            top_30_criticos,
+            x='mediana_costo',
+            y='tasa_retraso',
+            color='HOSP_TYPE',
+            text='etiqueta_visible', # <--- Usamos la columna filtrada
             labels={
-                'Proportion_Long_Liquidation': 'Proporción (%)',
-                'HOSP_LOCATION': 'Municipio Hospitalario',
-                'HOSP_DISTRICT': 'Distrito'
+                'mediana_costo': 'Mediana de Preautorizado',
+                'tasa_retraso': 'Casos con retraso > 180 días (%)',
+                'HOSP_TYPE': 'Tipo de Hospital'
             },
-            custom_data=['Proportion_Long_Liquidation', 'HOSP_DISTRICT']
+            title='<b>Relación Costo vs. Retraso en Pagos</b><br>Análisis de los 30 Sectores Municipales con Mayor Demora',
+            color_discrete_map={'Público': PALETA_MAESTRA['Primario_Lavanda'], 'Privado': PALETA_MAESTRA['Secundario_Menta']},
+            hover_name='HOSP_LOCATION' # Al pasar el mouse, siempre se ve el municipio
         )
 
         fig_plotly.update_traces(
-            texttemplate='%{x:.1f}%', # Format as percentage
-            textposition='outside',
-            textfont=dict(color='dimgrey', size=10),
-            hovertemplate="<b>Municipio:</b> %{y}<br><b>Proporción de liquidación larga:</b> %{x:.1f}%<br><b>Distrito:</b> %{customdata[1]}<extra></extra>"
+            marker=dict(size=15, opacity=0.8, line=dict(width=1, color='silver')),
+            textposition='top center'
         )
 
         fig_plotly.update_layout(
             template=TEMPLATE_CORPORATIVO,
-            title={
-                'text': "<b>Proporción de Días de Liquidación mayor a 6 meses por Municipio Hospitalario</b><br><sub>Top 10 Municipio con mayor proporción de casos de larga liquidación de Cirugías Cardíacas</sub>",
-                'y': 0.95, 'x': 0.1, 'yanchor': 'top', 'font': dict(size=20, color='dimgray')
-            },
-            xaxis=dict(ticksuffix="%"),
-            yaxis=dict(categoryorder='total ascending'), # To ensure the largest bars are at the top
-            margin = dict(t=60, l=40, r=40, b=40),
-            legend_title_text='Estado',
-            
+            width=1000,
+            height=650,
+            margin=dict(t=60, l=40, r=40, b=100),
+            xaxis=dict(tickformat='$,.0f', showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
+            yaxis=dict(ticksuffix='%', showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5)
         )
+
         st.plotly_chart(fig_plotly, width='stretch', key='chart-liquidacion3')
     with st.container(height=20, border=False):
         pass # El contenedor está vacío para generar espacio
@@ -1036,36 +1123,257 @@ with tab_liquidacion:
     st.plotly_chart(fig9, width='stretch', key='chart-liquidacion2')
 
 with tab_simulador:
+    importance_df_lgb = pd.DataFrame({
+        'Feature': [
+            'SURGERY',
+            'HOSP_TYPE',
+            'HOSP_LOCATION',
+            'TASA_MORTALIDAD_INTERNA_HOSP',
+            'fallecido',
+            'DOLARES_PREAUTH'
+        ],
+        'Importance_Mean': [
+            0.028520,
+            0.021751,
+            0.014707,
+            0.002859,
+            0.000962,
+            0.000676
+        ],
+        'Importance_Std': [
+            0.000462,
+            0.000649,
+            0.000520,
+            0.000473,
+            0.000300,
+            0.000100
+        ]
+    })
+
+    importance_df_lgb = importance_df_lgb.sort_values(by='Importance_Mean', ascending=False).reset_index(drop=True)
+
+    clean_name_mapping = {
+        'SURGERY': 'Cirugía',
+        'HOSP_TYPE': 'Tipo de Hospital',
+        'fallecido': 'Fallecido',
+        'CIRUGIA_CUARTIL_COSTO': 'Cirugía por cuartiles de costo',
+        'TASA_MORTALIDAD_INTERNA_HOSP': 'Tasa de Mortalidad Interna',
+        'HOSP_LOCATION': 'Municipio del Hospital',
+        'MEDIAN_surgery': 'Mediana de Costo por Cirugía',
+        'DOLARES_PREAUTH': 'Monto Pre-Autorizado'
+    }
+    importance_df_lgb['Feature_clean'] = importance_df_lgb['Feature'].map(clean_name_mapping)
+
+    importance_df_lgb = importance_df_lgb.sort_values(by='Importance_Mean', ascending=False)
+
+    clean_name_mapping = {
+        'SURGERY': 'Cirugía',
+        'HOSP_TYPE': 'Tipo de Hospital',
+        'fallecido': 'Fallecido',
+        'CIRUGIA_CUARTIL_COSTO': 'Cirugía por cuartiles de costo',
+        'TASA_MORTALIDAD_INTERNA_HOSP': 'Tasa de Mortalidad Interna',
+        'HOSP_LOCATION': 'Municipio del Hospital',
+        'MEDIAN_surgery': 'Mediana de Costo por Cirugía'
+    }
+    importance_df_lgb['Feature_clean'] = importance_df_lgb['Feature'].map(clean_name_mapping)
+
+    fig_features = px.bar(
+        importance_df_lgb,
+        x='Importance_Mean',
+        y='Feature_clean',
+        color='Feature_clean',
+        color_discrete_sequence=[PALETA_MAESTRA['Primario_Lavanda']],
+        title='Importancia de las Características por permutación para el modelo LightGBM',
+    )
+
+    fig_features.update_layout(
+        template=TEMPLATE_CORPORATIVO,
+        xaxis_title='Importancia Promedio',
+        yaxis_title='',
+        showlegend=False,
+        margin=dict(t=80, b=50, l=150),
+        title_x=0.1, title_y=0.95,
+        font_color="lightslategray",
+        font_family='Arial',
+        title_font=dict(size=20, weight=900),
+        title_font_color="dimgrey",
+        font=dict(size=16, weight=700)
+    )
+
+    st.plotly_chart(fig_features, width='stretch', key='chart-features')
+    
+    st.title("Modelo Light BGM Clasisificación")
+    c1, c2 = st.columns([40,60])
+    with c1:
+        cm_array = np.array([[71532, 15586],
+                            [ 1214, 6661]])
+
+        # Convert the NumPy array to a Pandas DataFrame
+        confusion_matrix_df = pd.DataFrame(
+            cm_array,
+            index=['No Crítico', 'Crítico'],
+            columns=['No Crítico', 'Crítico']
+        )
+        fig_confusion = px.imshow(confusion_matrix_df,
+                    labels=dict(x="Predicted", y="True", color="Count"),
+                    x=['No Crítico', 'Crítico'],
+                    y=['No Crítico', 'Crítico'],
+                    text_auto=True,
+                    color_continuous_scale=px.colors.sequential.Blues)
+        fig_confusion.update_layout(
+            title='Matriz de Confusión del Modelo LightGBM',
+            xaxis_title='Clase Predicha',
+            yaxis_title='Clase Real',
+            coloraxis_colorbar_title='',
+            margin=dict(t=80, b=50, l=150),
+            title_x=0.1, title_y=0.95,
+            font_color="lightslategray",
+            font_family='Arial',
+            title_font=dict(size=20, weight=900),
+            title_font_color="dimgrey",
+            font=dict(size=16, weight=700)
+        )
+        st.plotly_chart(fig_confusion, width='stretch',key='chart-confusion')
+    with c2:
+        fpr = [0., 0.1864, 1.]
+        tpr = [0., 0.85, 1.]
+        umbrales = [np.inf, 1., 0.]
+
+        # Recalculate ROC AUC since it was not explicitly defined in this cell
+        roc_auc = auc(np.array(fpr), np.array(tpr)) 
+
+        # Create a DataFrame for display as requested by the original cell content
+        df_roc = pd.DataFrame({'FPR': fpr, 'TPR': tpr, 'Umbral': umbrales})
+
+        # Generate Plotly ROC curve
+        fig_roc = go.Figure()
+
+        # Add ROC curve trace
+        fig_roc.add_trace(go.Scatter(
+            x=fpr,
+            y=tpr,
+            mode='lines',
+            name=f'Curva ROC (AUC = {roc_auc:.2f})',
+            line=dict(color='#dd9993', width=2)
+        ))
+
+        # Add random classifier line
+        fig_roc.add_trace(go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode='lines',
+            name='Clasificador aleatorio',
+            line=dict(color='#8fa1cd', width=2, dash='dash')
+        ))
+
+        fig_roc.update_layout(
+            template=TEMPLATE_CORPORATIVO,
+            title=dict(
+                text='<b>Característica Operativa del Receptor (ROC)</b><br><sub>Evaluación del Modelo LightGBM</sub>',
+                x=0.5,
+                y=0.95,
+                xanchor='center',
+                yanchor='top'
+            ),
+            xaxis=dict(
+                title='Tasa de Falsos Positivos (FPR)',
+                range=[0.0, 1.0],
+                gridcolor='#f0f0f0', linecolor='lightgrey', tickfont=dict(color='dimgrey')
+            ),
+            yaxis=dict(
+                title='Tasa de Verdaderos Positivos (TPR)',
+                range=[0.0, 1.05],
+                gridcolor='#f0f0f0', linecolor='lightgrey', tickfont=dict(color='dimgrey')
+            ),
+            legend=dict(x=0.98, y=0.02, xanchor='right', yanchor='bottom', bgcolor='rgba(255,255,255,0.7)', bordercolor='lightgrey', borderwidth=1),
+            margin=dict(t=80, b=50, l=150, r=40),
+            font_color="lightslategray",
+            font_family='Arial',
+            title_font=dict(size=20, weight=900),
+            title_font_color="dimgrey",
+            font=dict(size=16, weight=700)
+        )
+        st.plotly_chart(fig_roc, width='stretch', key='chart-roc')
+    st.divider()
+    st.title("Modelo Light BGM Regresión por Cuantiles")
+    c3,c4= st.columns(2)
+
+    with c3:
+        coverage_data = {
+            'Cuantil': ['10', '50', '90'],
+            'Esperado': ['10%', '50%', '90%'],
+            'Real': ['10.1%', '50.0%', '89.9%']
+        }
+
+        coverage_df = pd.DataFrame(coverage_data)
+
+        with st.container(key='table-cuantil', height=200):
+            generarTabla(coverage_df)
+
     st.title("Simulador de Tiempos de Demora")
     st.markdown("---")
-    st.markdown("### Regresión por Cuantiles y Clasificación de Riesgo con LightGBM")
+    st.markdown("### Regresión por Cuantiles y Clasificación de Riesgo con LightGBM (Nativo)")
     st.write("Seleccioná las características reales para calcular el rango estimado de días de liquidación y alertas de demora.")
 
-    # 2. CARGA DE MODELOS Y DATA MAESTRA
+    with c4:
+        st.html(
+                """
+                <div class="text-column-container">
+                    <div class="dashboard-card">
+                        <h4 class="text-card-title">Pinball Loss (Q90):</h4>
+                        <p class="stat-value">
+                            9.1987
+                        </p>
+                        <p class="text-card-body">
+                            Se utiliza Pinball Loss. Esta función mide la distancia en días entre la predicción y el valor real, aplicando una penalización asimétrica adaptada específicamente para evaluar el cuantil 90.   
+                        </p>
+                    </div>
+                </div>
+                """
+            )
+
+
     @st.cache_resource
     def cargar_recursos():
-        m10 = joblib.load("modelo_q10.pkl")
-        m50 = joblib.load("modelo_q50.pkl")
-        m90 = joblib.load("modelo_q90.pkl")
-        m_clf = joblib.load("modelo_clasificador_lgb.pkl")
+        # Cargar modelos nativos utilizando lgb.Booster
+        m10 = lgb.Booster(model_file="modelo_q10.txt")
+        m50 = lgb.Booster(model_file="modelo_q50.txt")
+        m90 = lgb.Booster(model_file="modelo_q90.txt")
+        m_clf = lgb.Booster(model_file="modelo_clasificador_lgb.txt")
+
+        # Cargar el pipeline de preprocesamiento, umbrales y data maestra con joblib
+        preproc = joblib.load("preprocesador_pipeline.pkl") # Corregido al nombre exacto guardado
         u_opt = joblib.load("umbral_optimo_lgb.pkl")
         df_rel = joblib.load("df_relaciones_desplegables.pkl")
-        return m10, m50, m90, m_clf, u_opt, df_rel
+
+        return m10, m50, m90, m_clf, preproc, u_opt, df_rel
 
     try:
-        model_10, model_50, model_90, model_clf, umbral_optimo, df_rel = cargar_recursos()
+        (
+            model_10,
+            model_50,
+            model_90,
+            model_clf,
+            preprocesador,
+            umbral_optimo,
+            df_rel,
+        ) = cargar_recursos()
     except Exception as e:
-        st.error(f"⚠️ No se pudieron cargar los archivos .pkl: {e}")
+        st.error(f"⚠️ No se pudieron cargar los archivos del modelo: {e}")
         st.stop()
 
     columnas_reales = df_rel.columns.tolist()
 
-    COL_CIRUGIA = 'SURGERY'
-    COL_MUNICIPIO = 'HOSP_LOCATION'
+    COL_CIRUGIA = "SURGERY"
+    COL_MUNICIPIO = "HOSP_LOCATION"
+    COL_TIPO_HOSP = "HOSP_TYPE"
+    COL_PREAUTH = "DOLARES_PREAUTH"
 
-    if COL_MUNICIPIO not in columnas_reales:
-        st.error(f"❌ La columna '{COL_MUNICIPIO}' no existe en tu archivo pkl.")
-        st.stop()
+    # Validamos que las nuevas variables existan en la data maestra
+    for col in [COL_MUNICIPIO, COL_TIPO_HOSP, COL_PREAUTH]:
+        if col not in columnas_reales:
+            st.error(f"❌ La columna '{col}' faltante en tu archivo maestro .pkl.")
+            st.stop()
 
     # ==============================================================================
     # 3. INTERFAZ DE ENTRADA DINÁMICA
@@ -1073,17 +1381,30 @@ with tab_simulador:
     lista_cirugias = sorted(df_rel[COL_CIRUGIA].dropna().unique().tolist())
     cirugia = st.selectbox("1. Seleccioná la Cirugía Médica", lista_cirugias)
 
-    # Filtrar municipios disponibles según la cirugía (o dejar todos los del pkl si no están condicionados)
-    lista_municipios = sorted(df_rel[df_rel[COL_CIRUGIA] == cirugia][COL_MUNICIPIO].dropna().unique().tolist())
-    if not lista_municipios: # Fallback por si esa cirugía no tiene registros en el pkl
+    # Filtrar municipios disponibles según la cirugía
+    lista_municipios = sorted(
+        df_rel[df_rel[COL_CIRUGIA] == cirugia][COL_MUNICIPIO]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    if not lista_municipios:
         lista_municipios = sorted(df_rel[COL_MUNICIPIO].dropna().unique().tolist())
-        
+
     municipio = st.selectbox("2. Seleccioná el Municipio del Hospital", lista_municipios)
+
+    # Nuevo botón/selector para HOSP_TYPE requerido
+    lista_tipos = sorted(df_rel[COL_TIPO_HOSP].dropna().unique().tolist())
+    tipo_hospital = st.selectbox("3. Seleccioná el Tipo de Hospital", lista_tipos)
 
     st.markdown("---")
     st.markdown("#### Contexto del Paciente")
-    
-    fallecido = st.radio("¿El paciente falleció?", [0, 1], format_func=lambda x: "Sí" if x == 1 else "No")
+
+    fallecido = st.radio(
+        f"¿El paciente falleció?",
+        [0, 1],
+        format_func=lambda x: "Sí" if x == 1 else "No",
+    )
 
     st.markdown(" ")
     boton_calcular = st.button("Predecir Tiempos de Demora y Evaluar Riesgo", type="primary")
@@ -1092,39 +1413,67 @@ with tab_simulador:
     # 4. EXTRACCIÓN Y PREDICCIÓN COMBINADA (REGRESIÓN + CLASIFICACIÓN)
     # ==============================================================================
     if boton_calcular:
-        # Extraer la tasa de mortalidad correspondiente al municipio seleccionado
+        # A. Extraer tasa de murtalidad por municipio
         df_muni_info = df_rel[df_rel[COL_MUNICIPIO] == municipio]
         if df_muni_info.empty:
             st.error("Error al recuperar los datos internos para el municipio seleccionado.")
             st.stop()
-            
-        registro = df_muni_info.iloc[0]
-        
-        # Construcción del vector con las 4 variables predictoras exactas
-        input_data = pd.DataFrame([{
-            'SURGERY': cirugia,
-            'HOSP_LOCATION': municipio,
-            'fallecido': int(fallecido),
-            'TASA_MORTALIDAD_INTERNA_HOSP': float(registro['TASA_MORTALIDAD_INTERNA_HOSP'])
-        }])
-        
-        # Forzar el formato categórico para LightGBM nativo
-        for col in ['SURGERY', 'HOSP_LOCATION']:
-            input_data[col] = input_data[col].astype('category')
-            
-        # A. Ejecución de Modelos de Regresión Cuantílica
-        pred_piso = max(0, round(model_10.predict(input_data)[0], 1))
-        pred_mediana = max(0, round(model_50.predict(input_data)[0], 1))
-        pred_techo = max(0, round(model_90.predict(input_data)[0], 1))
-        
-        # B. Ejecución del Clasificador con Umbral Óptimo de Youden
-        prob_demora_critica = model_clf.predict_proba(input_data)[0][1]
-        es_riesgo_critico = prob_demora_critica >= umbral_optimo
+        registro_muni = df_muni_info.iloc[0]
+
+        # B. Extraer DOLARES_PREAUTH en base a la cirugía seleccionada
+        df_surgery_info = df_rel[df_rel[COL_CIRUGIA] == cirugia]
+        if df_surgery_info.empty:
+            st.error("Error al recuperar el costo pre-autorizado histórico para esta cirugía.")
+            st.stop()
+        monto_preauth = float(df_surgery_info[COL_PREAUTH].mean())
+
+        # C. Construcción del vector completo respetando las 6 variables
+        input_data = pd.DataFrame([
+            {
+                "SURGERY": cirugia,
+                "HOSP_TYPE": tipo_hospital,
+                "fallecido": int(fallecido),
+                "HOSP_LOCATION": municipio,
+                "DOLARES_PREAUTH": monto_preauth,
+                "TASA_MORTALIDAD_INTERNA_HOSP": float(registro_muni["TASA_MORTALIDAD_INTERNA_HOSP"]),
+            }
+        ])
+
+        # ⚠️ CRUCIAL REORDENAR: Cambia este orden de lista si tu X_train original tenía otra disposición
+        orden_features_entrenamiento = [
+            'SURGERY', 
+            'HOSP_TYPE', 
+            'fallecido', 
+            'HOSP_LOCATION', 
+            'DOLARES_PREAUTH', 
+            'TASA_MORTALIDAD_INTERNA_HOSP'
+        ]
+        input_data = input_data[orden_features_entrenamiento]
+
+        # Forzar el formato categórico para las columnas de texto
+        for col in ["SURGERY", "HOSP_TYPE", "HOSP_LOCATION"]:
+            input_data[col] = input_data[col].astype("category")
+
+        # --- PREDICCIONES DIRECTAS ---
+        try:
+            # A. Regresión Cuantílica
+            pred_piso = max(0, round(model_10.predict(input_data)[0], 1))
+            pred_mediana = max(0, round(model_50.predict(input_data)[0], 1))
+            pred_techo = max(0, round(model_90.predict(input_data)[0], 1))
+
+            # B. Clasificación: El Booster lee el mismo DataFrame ordenado directamente
+            prob_demora_critica = model_clf.predict(input_data)[0]
+            es_riesgo_critico = prob_demora_critica >= umbral_optimo
+
+        except Exception as e:
+            st.error(f"❌ Error durante la ejecución de los modelos: {e}. Comprobá que las columnas sigan el orden de entrenamiento exacto.")
+            st.stop()
 
         # ==============================================================================
         # 5. RENDERIZADO DE RESULTADOS
         # ==============================================================================
-        
+        st.caption(f"ℹ️ **Costo Pre-Autorizado Calculado:** Base histórica de ${monto_preauth:,.2f} USD vinculada a la cirugía.")
+
         # --- SEMÁFORO DE RIESGO DE NEGOCIO ---
         st.markdown("### ⚠️ Evaluación de Alerta Burocrática (Umbral Crítico 180 Días)")
         if es_riesgo_critico:
@@ -1135,8 +1484,8 @@ with tab_simulador:
                     <span style="color: #5a5a5a;">El modelo estima una probabilidad de <b>{prob_demora_critica:.1%}</b> (superior al umbral óptimo de {umbral_optimo:.1%}). 
                     Este trámite presenta patrones severos de retraso institucional y requiere asignación de vía rápida.</span>
                 </div>
-                """, 
-                unsafe_allow_html=True
+                """,
+                unsafe_allow_html=True,
             )
         else:
             st.markdown(
@@ -1146,8 +1495,8 @@ with tab_simulador:
                     <span style="color: #5a5a5a;">Probabilidad de retraso crítico calculada en <b>{prob_demora_critica:.1%}</b> (por debajo del riesgo de demora). 
                     Se estima un procesamiento administrativo estándar.</span>
                 </div>
-                """, 
-                unsafe_allow_html=True
+                """,
+                unsafe_allow_html=True,
             )
 
         # Renderizado de Tarjetas Métricas de Regresión
@@ -1159,6 +1508,6 @@ with tab_simulador:
             st.metric(label="Mediana Esperada (Q50)", value=f"{pred_mediana} días")
         with c3:
             st.metric(label="Techo Crítico (Q90)", value=f"{pred_techo} días")
-            
+
         brecha = round(pred_techo - pred_piso, 1)
         st.info(f"💡 **Ventana de Incertidumbre:** El rango de duda es de **{brecha} días** para este caso específico.")

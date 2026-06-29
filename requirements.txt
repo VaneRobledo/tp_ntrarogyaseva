@@ -2,9 +2,9 @@ streamlit
 pandas
 numpy
 plotly
-geopandas==1.1.3
+geopandas
 gdown
 joblib
-lightgbm==4.6.0
+lightgbm
 imblearn
-scikit-learn==1.8.0
+scikit-learn
