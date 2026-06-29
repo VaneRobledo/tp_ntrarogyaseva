@@ -1335,33 +1335,26 @@ with tab_simulador:
 
     @st.cache_resource
     def cargar_recursos():
-        # Cargar modelos nativos utilizando lgb.Booster
+        # Cargar modelos nativos utilizando lgb.Booster (.txt)
         m10 = lgb.Booster(model_file="modelo_q10.txt")
         m50 = lgb.Booster(model_file="modelo_q50.txt")
         m90 = lgb.Booster(model_file="modelo_q90.txt")
         m_clf = lgb.Booster(model_file="modelo_clasificador_lgb.txt")
 
-        # Cargar el pipeline de preprocesamiento, umbrales y data maestra con joblib
-        preproc = joblib.load("preprocesador_pipeline.pkl") # Corregido al nombre exacto guardado
+        # Cargar SOLO los objetos simples con joblib (El float del umbral y el DataFrame maestro)
         u_opt = joblib.load("umbral_optimo_lgb.pkl")
         df_rel = joblib.load("df_relaciones_desplegables.pkl")
 
-        return m10, m50, m90, m_clf, preproc, u_opt, df_rel
+        return m10, m50, m90, m_clf, u_opt, df_rel
+
 
     try:
-        (
-            model_10,
-            model_50,
-            model_90,
-            model_clf,
-            preprocesador,
-            umbral_optimo,
-            df_rel,
-        ) = cargar_recursos()
+        model_10, model_50, model_90, model_clf, umbral_optimo, df_rel = (
+            cargar_recursos()
+        )
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los archivos del modelo: {e}")
         st.stop()
-
     columnas_reales = df_rel.columns.tolist()
 
     COL_CIRUGIA = "SURGERY"
