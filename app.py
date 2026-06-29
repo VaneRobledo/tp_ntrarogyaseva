@@ -202,7 +202,7 @@ df['HOSP_NAME'] = df['HOSP_NAME'].replace(hospital_names_clean)
 cols = st.columns(4)
 registros = len(df)
 cardiaco = (df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']['DOLARES_CLAIM'].sum()/df['DOLARES_CLAIM'].sum()*100).round(2)
-telangana = (df[(df['HOSP_STATE']=='Telangana')&(df['SURGERY'].isin(cirugias_a_graficar))]['DOLARES_CLAIM'].sum()/df[df['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()*100).round(1)
+telangana = (df[(df['HOSP_STATE']=='Telangana')&(df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica')]['DOLARES_CLAIM'].sum()/df[df['HOSP_STATE'] == 'Telangana']['DOLARES_CLAIM'].sum()*100).round(1)
 limite = (df[(df['dias_liquidacion']>90)&(df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica')]['ID'].count()/df[df['CATEGORY_NAME']=='Cirugía Cardíaca y Cardiotorácica']['ID'].count()*100).round(0)
 
 metrics = [
